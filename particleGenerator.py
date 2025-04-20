@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import json
 from dataclasses import dataclass
+import math
 
 # Constants for readability
 V, THETA, PHI, MASS, DENSITY = range(5)
@@ -18,7 +19,8 @@ class Bomb:
 
 def generate_mass_vectorized(mean_mass: float, size: int):
     U = np.random.uniform(0, 1, size)
-    return (np.log(U) ** 2) * mean_mass
+    return (np.log(U) ** 2) * (mean_mass / 2)
+
 
 
 def generate_fragments(bomb: Bomb) -> np.ndarray:
@@ -120,10 +122,40 @@ def open_data():
     velocity = data["velocity"]
     return bomb, theta_hit, velocity
 
+def reduce_speed_one_wall_per_fragment(fragment: np.ndarray, h = 0.02):
+    # Constants for Mild Steel from THOR formula table
+    c11 = 4.356
+    c12 = 0.674
+    c13 = -0.791
+    c14 = 0.989
+    c15 = 0.434
+    c31 = -1.195
+    c32 = 0.234
+    c33 = 0.743
+    c34 = 0.469
+    c35 = 0.483
+
+    V_R = fragment[V]
+    m0 = fragment[MASS]
+    A = (fragment[MASS] / (fragment[DENSITY] * 0.298)) ** (2 / 3)
+    theta_R =  np.pi / 2 - fragment[THETA]
+
+    numerator = 0.3048e11 * (61023.75 * h) ** c12
+    denominator = (15432.1 * m0) ** c13 * (1 / math.cos(math.radians(theta_R))) ** c14 * (3.28084 * V_R) ** c15
+    fragment[V] = V_R - numerator / denominator
+
+    numerator = 6.48e26 * (61023.75 * h) ** c32  # 6.48e(31-5) = 6.48e26
+    denominator = (15432.1 * m0) ** c33 * (1 / math.cos(math.radians(theta_R))) ** c34 * (3.28084 * V_R) ** c35
+    fragment[MASS] = m0 - numerator / denominator
+
+
+
+
 
 def test():
     bomb, theta_hit, velocity = open_data()
     fragments = generate_fragments(bomb)
     transformed = transform_coordinates(fragments, velocity,
                                         np.radians(theta_hit))
+
     return transformed

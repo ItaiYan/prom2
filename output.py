@@ -67,26 +67,33 @@ def main(shreds):
 ###############################################################################################################
 ################################################################################################################
 
-def convert_to_table(shreds, squre_size=10, lenth=1000):
-    A = np.empty(((lenth * 2)//squre_size, (lenth*2)//squre_size), dtype=object)
+def convert_to_table(shreds, squre_size=10, length=2000):
+    """
+    orgenizes the shreds in squares
+    :param shreds:
+    :param squre_size:
+    :param length:
+    :return:
+    """
+    A = np.empty(((length * 2) // squre_size, (length * 2) // squre_size), dtype=object)
 
-    for i in range(((lenth * 2)//squre_size)):
-        for j in range(((lenth * 2)//squre_size)):
+    for i in range(((length * 2) // squre_size)):
+        for j in range(((length * 2) // squre_size)):
             A[i, j] = []
 
     counter = 0
     for i in range(len(shreds)):
-        if -lenth <= shreds[i][0] < lenth and -lenth <= shreds[i][1] < lenth:
-            w = int((shreds[i][0] + lenth) / squre_size)
-            h = int((shreds[i][1] + lenth) / squre_size)
+        if -length <= shreds[i][0] < length and -length <= shreds[i][1] < length:
+            w = int((shreds[i][0] + length) / squre_size)
+            h = int((shreds[i][1] + length) / squre_size)
             TVM = [shreds[i][3], shreds[i][2], shreds[i][4]] #theata, velocity, mass
             A[h, w].append(TVM)
         else:
             counter += 1
 
-    for y in range(int(lenth/squre_size)):
+    for y in range(int(length / squre_size)):
         for x in range(len(A[0])):
-            A[lenth//squre_size-y, x] = A[lenth//squre_size+y, x]
+            A[length // squre_size - y, x] = A[length // squre_size + y, x]
 
     return A
 
@@ -95,9 +102,18 @@ def color(data, scatter_x=None, scatter_y=None, table_size=1000):
     # Convert data to numpy array if it isn't already
     data = np.array(data)
 
+    for row in range(len(data)):
+        for column in range(len(data[0])):
+            prob = data[row][column]
+            if prob == 0:
+                data[row][column] = -6
+            else:
+                data[row][column] = np.log10(prob)
+
+
     # Each square is 10 meters, so create coordinate arrays in meters
-    x = np.arange(0, data.shape[1] + 1) * 10 - 1000  # +1 for pcolormesh edges
-    y = np.arange(0, data.shape[0] + 1) * 10  - 1000# +1 for pcolormesh edges
+    x = np.arange(0, data.shape[1] + 1) * 10 - 2000  # +1 for pcolormesh edges
+    y = np.arange(0, data.shape[0] + 1) * 10  - 2000# +1 for pcolormesh edges
 
     # Define a custom colormap: white (0) to red (1)
     colors = [(1, 1, 1), (1, 0, 0)]  # White to Red
@@ -117,8 +133,8 @@ def color(data, scatter_x=None, scatter_y=None, table_size=1000):
         plt.legend()
 
     # Add contour line at z = -3.5
-    x_centers = (np.arange(data.shape[1]) + 0.5) * 10 - 1000
-    y_centers = (np.arange(data.shape[0]) + 0.5) * 10 - 1000
+    x_centers = (np.arange(data.shape[1]) + 0.5) * 10 - 2000
+    y_centers = (np.arange(data.shape[0]) + 0.5) * 10 - 2000
     cs = plt.contour(x_centers, y_centers, data, levels=[-3.5], colors='black')
     plt.clabel(cs, inline=True, fontsize=10, fmt='%1.1f')
 
@@ -131,7 +147,7 @@ def color(data, scatter_x=None, scatter_y=None, table_size=1000):
         y_points = (y_idx + 0.5) * 10  # Convert to meters (center of cells)
 
         # Calculate distances from center (1000, 1000)
-        center_x, center_y = 1000, 1000
+        center_x, center_y = 2000, 2000
         distances = np.sqrt((x_points - center_x) ** 2 + (y_points - center_y) ** 2)
 
         # Get maximum distance (radius) plus a small buffer
@@ -149,13 +165,13 @@ def color(data, scatter_x=None, scatter_y=None, table_size=1000):
     max_ticks = 10
     if data.shape[1] > max_ticks:
         x_step = (data.shape[1] * 10) // max_ticks  # Step in meters
-        plt.xticks(np.arange(0, data.shape[1] * 10 + 1, x_step) - 1000)
+        plt.xticks(np.arange(0, data.shape[1] * 10 + 1, x_step) - 2000)
     else:
         plt.xticks(x)
 
     if data.shape[0] > max_ticks:
         y_step = (data.shape[0] * 10) // max_ticks  # Step in meters
-        plt.yticks(np.arange(0, data.shape[0] * 10 + 1, y_step) - 1000)
+        plt.yticks(np.arange(0, data.shape[0] * 10 + 1, y_step) - 2000)
     else:
         plt.yticks(y)
 
@@ -222,7 +238,7 @@ def _find_kill_probability_per_square_numba(fragments: np.ndarray) -> float:
         prod_survival *= survival_probs[i]
     square_prob = 1.0 - prod_survival
 
-    return np.log10(square_prob) if square_prob > 1e-6 else -6.0
+    return square_prob
 
 # -------------------- Python Interface --------------------
 
@@ -232,7 +248,7 @@ def find_kill_probability_per_square(fragments: List[np.ndarray]) -> float:
     Input: list of shape-(5,) arrays → converted to (n, 5) array.
     """
     if len(fragments) == 0:
-        return -6.0
+        return 0
     fragments_np = np.array(fragments)
     return _find_kill_probability_per_square_numba(fragments_np)
 
@@ -253,7 +269,7 @@ def get_death_probability_map(hit_map: List[List[List[np.ndarray]]]) -> np.ndarr
 
 
 if __name__ == '__main__':
-    num_runs = 1000
+    num_runs = 100
     death_prob = 0
 
     print ("before loading file")
@@ -261,9 +277,10 @@ if __name__ == '__main__':
     print ("after loading file")
     # t = time.time()
     for i in tqdm(range(num_runs)):
+        # generates initial conditions
         initial_conds = particleGenerator.test() # 0.01
 
-        #shreds = hitLocations.main(initial_conds)
+        # generates a list of
         shreds = dataGenerator.get_interpolated_value(initial_conds, file) # 0.012
 
 

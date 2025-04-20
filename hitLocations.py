@@ -24,7 +24,7 @@ class Projectile:
         initial_state (numpy.ndarray): Initial state array [x0, y0, vx0, vy0].
     """
 
-    def __init__(self, v0, theta, y0, mass=0.1, drag_coef=0.98,
+    def __init__(self, v0, theta, y0, mass=0.1, drag_coef=1.1,
                  rho_air=1.225, density=7800, ks=0.298):
         """
         Initializes the projectile with the given parameters.
