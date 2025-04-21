@@ -110,6 +110,7 @@ def open_data():
     num_of_fragments = bomb_data["N"].to_numpy()
     mean_mass = bomb_data["mean weight (grain)"].to_numpy() * 0.00006479891
     mean_velocity = bomb_data["mean velocity (ft/s)"].to_numpy() * 0.3048
+    urban_area = bool(data["urban area"])
 
     bomb = Bomb(
         num_of_fragments=num_of_fragments,
@@ -120,9 +121,9 @@ def open_data():
     )
     theta_hit = data["angle"]
     velocity = data["velocity"]
-    return bomb, theta_hit, velocity
+    return bomb, theta_hit, velocity, urban_area
 
-def reduce_speed_one_wall_per_fragment(fragment: np.ndarray, h = 0.02):
+def reduce_speed_all_fragments(fragments: np.ndarray, h=0.02):
     # Constants for Mild Steel from THOR formula table
     c11 = 4.356
     c12 = 0.674
@@ -135,27 +136,34 @@ def reduce_speed_one_wall_per_fragment(fragment: np.ndarray, h = 0.02):
     c34 = 0.469
     c35 = 0.483
 
-    V_R = fragment[V]
-    m0 = fragment[MASS]
-    A = (fragment[MASS] / (fragment[DENSITY] * 0.298)) ** (2 / 3)
-    theta_R =  np.pi / 2 - fragment[THETA]
+    V_R = fragments[:, V]
+    m0 = fragments[:, MASS]
+    density = fragments[:, DENSITY]
+    theta = fragments[:, THETA]
 
-    numerator = 0.3048e11 * (61023.75 * h) ** c12
-    denominator = (15432.1 * m0) ** c13 * (1 / math.cos(math.radians(theta_R))) ** c14 * (3.28084 * V_R) ** c15
-    fragment[V] = V_R - numerator / denominator
+    A = (m0 / (density * 0.298)) ** (2 / 3)
 
-    numerator = 6.48e26 * (61023.75 * h) ** c32  # 6.48e(31-5) = 6.48e26
-    denominator = (15432.1 * m0) ** c33 * (1 / math.cos(math.radians(theta_R))) ** c34 * (3.28084 * V_R) ** c35
-    fragment[MASS] = m0 - numerator / denominator
+    # First reduction (Velocity)
+    num1 = 0.3048e11 * (61023.75 * h) ** c12
+    den1 = (15432.1 * m0) ** c13 * (1 / np.cos(theta)) ** c14 * (3.28084 * V_R) ** c15
+    fragments[:, V] = V_R - num1 / den1
 
+    # Second reduction (Mass)
+    num2 = 6.48e26 * (61023.75 * h) ** c32
+    den2 = (15432.1 * m0) ** c33 * (1 / np.cos(theta)) ** c34 * (3.28084 * V_R) ** c35
+    fragments[:, MASS] = m0 - num2 / den2
+
+    return fragments
 
 
 
 
 def test():
-    bomb, theta_hit, velocity = open_data()
+    bomb, theta_hit, velocity, urban_area = open_data()
     fragments = generate_fragments(bomb)
     transformed = transform_coordinates(fragments, velocity,
                                         np.radians(theta_hit))
+    if urban_area:
+        transformed = reduce_speed_all_fragments(transformed)
 
     return transformed
