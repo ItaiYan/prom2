@@ -156,8 +156,6 @@ def reduce_speed_all_fragments(fragments: np.ndarray, h=0.02):
     return fragments
 
 
-
-
 def test():
     bomb, theta_hit, velocity, urban_area = open_data()
     fragments = generate_fragments(bomb)
