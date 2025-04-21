@@ -88,8 +88,6 @@ def convert_to_table(shreds, squre_size=10, length=2000):
             h = int((shreds[i][1] + length) / squre_size)
             TVM = [shreds[i][3], shreds[i][2], shreds[i][4]] #theata, velocity, mass
             A[h, w].append(TVM)
-        else:
-            counter += 1
 
     for y in range(int(length / squre_size)):
         for x in range(len(A[0])):
@@ -105,7 +103,7 @@ def color(data, scatter_x=None, scatter_y=None, table_size=1000):
     for row in range(len(data)):
         for column in range(len(data[0])):
             prob = data[row][column]
-            if prob == 0:
+            if prob < 10 ** -6:
                 data[row][column] = -6
             else:
                 data[row][column] = np.log10(prob)
@@ -113,7 +111,7 @@ def color(data, scatter_x=None, scatter_y=None, table_size=1000):
 
     # Each square is 10 meters, so create coordinate arrays in meters
     x = np.arange(0, data.shape[1] + 1) * 10 - 2000  # +1 for pcolormesh edges
-    y = np.arange(0, data.shape[0] + 1) * 10  - 2000# +1 for pcolormesh edges
+    y = np.arange(0, data.shape[0] + 1) * 10  - 2000   # +1 for pcolormesh edges
 
     # Define a custom colormap: white (0) to red (1)
     colors = [(1, 1, 1), (1, 0, 0)]  # White to Red
@@ -269,7 +267,7 @@ def get_death_probability_map(hit_map: List[List[List[np.ndarray]]]) -> np.ndarr
 
 
 if __name__ == '__main__':
-    num_runs = 100
+    num_runs = 20
     death_prob = 0
 
     print ("before loading file")

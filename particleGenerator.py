@@ -23,6 +23,8 @@ def generate_mass_vectorized(mean_mass: float, size: int):
 
 
 
+
+
 def generate_fragments(bomb: Bomb) -> np.ndarray:
     fragments = []
     for section in range(bomb.num_of_sections):
