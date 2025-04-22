@@ -70,7 +70,7 @@ class Projectile:
 
         return np.array([vx, vy, ax, ay])
 
-    def simulate(self, t_max=10000.0, rtol=1e-12, atol=1e-12):
+    def simulate(self, t_max=10000.0, rtol=1e-8, atol=1e-8):
         """
         Simulates projectile motion up to t_max using SciPy's RK45.
         """

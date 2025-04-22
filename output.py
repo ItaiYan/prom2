@@ -16,7 +16,7 @@ import hitLocations
 from numba import njit
 from typing import List
 from tqdm import tqdm
-
+from scipy.interpolate import RegularGridInterpolator
 
 import dataGenerator
 
@@ -111,7 +111,7 @@ def color(data, scatter_x=None, scatter_y=None, table_size=1000):
 
     # Each square is 10 meters, so create coordinate arrays in meters
     x = np.arange(0, data.shape[1] + 1) * 10 - 2000  # +1 for pcolormesh edges
-    y = np.arange(0, data.shape[0] + 1) * 10  - 2000   # +1 for pcolormesh edges
+    y = np.arange(0, data.shape[0] + 1) * 10 - 2000   # +1 for pcolormesh edges
 
     # Define a custom colormap: white (0) to red (1)
     colors = [(1, 1, 1), (1, 0, 0)]  # White to Red
@@ -182,6 +182,8 @@ def color(data, scatter_x=None, scatter_y=None, table_size=1000):
     plt.grid(alpha=0.3)
     plt.axis('equal')
     plt.show()
+
+
 
 @njit
 def _kill_probability_per_fragment_vec(theta: np.ndarray,
@@ -273,13 +275,18 @@ if __name__ == '__main__':
     print ("before loading file")
     file = dataGenerator.load_file()
     print ("after loading file")
+    values, x, y, z = file
+    interp_func = RegularGridInterpolator((x, y, z), values, bounds_error=False,
+                                          method='quintic', fill_value=None)
+    print ("after creating the interpolation function")
+
     # t = time.time()
     for i in tqdm(range(num_runs)):
         # generates initial conditions
         initial_conds = particleGenerator.test() # 0.01
 
         # generates a list of
-        shreds = dataGenerator.get_interpolated_value(initial_conds, file) # 0.012
+        shreds = dataGenerator.get_interpolated_value(initial_conds, interp_func) # 0.012
 
 
         hit_map = convert_to_table(shreds) #0.04-0.07

@@ -51,7 +51,7 @@ def load_file(pickle_file='function_values.pkl'):
         data = pickle.load(f)
     return data['arr'], data['x_range'], data['y_range'], data['z_range']
 # Example of how to load and use the data
-def get_interpolated_value(fragments, file):
+def get_interpolated_value(fragments, interp_func):
     """
     Given a point (x, y, z), returns an interpolated function value using
     trilinear interpolation from the 8 closest grid points.
@@ -63,10 +63,11 @@ def get_interpolated_value(fragments, file):
     Returns:
         float: Interpolated function value at (x, y, z)
     """
+    #
+    # values, x, y, z = file
+    # interp_func = RegularGridInterpolator((x, y, z), values, bounds_error=False,
+    #                                       method='cubic', fill_value=None)
 
-    values, x, y, z = file
-    interp_func = RegularGridInterpolator((x, y, z), values, bounds_error=False,
-                                          fill_value=None)
     fragments = np.array(fragments)
     try:
         interpolated_values = interp_func(fragments[:, [0, 1, 3]])
@@ -95,74 +96,6 @@ def get_interpolated_value(fragments, file):
         interpolated_values[:, 2],  # angle
         mass  # mass
     ))
-    return res
-    ############################################################
-    results, x_range, y_range, z_range = file
-
-    res = []
-    for i in range(len(fragments)):
-        v0 = fragments[i][0]
-        theta = fragments[i][1]
-        mass = fragments[i][3]
-
-        # Find the nearest grid point indices (lower bound)
-        x_idx = np.searchsorted(x_range, v0) - 1
-        y_idx = np.searchsorted(y_range, theta) - 1
-        z_idx = np.searchsorted(z_range, mass) - 1
-
-        # Get grid dimensions
-        n_points = len(x_range)
-
-        # Ensure indices are within bounds
-        x_idx = max(0, min(x_idx, n_points - 2))
-        y_idx = max(0, min(y_idx, n_points - 2))
-        z_idx = max(0, min(z_idx, n_points - 2))
-
-        # Get the 8 cube vertices
-        x0, x1 = x_range[x_idx], x_range[x_idx + 1]
-        y0, y1 = y_range[y_idx], y_range[y_idx + 1]
-        z0, z1 = z_range[z_idx], z_range[z_idx + 1]
-
-        # Get function values at the 8 vertices
-        points = {}
-        for dx in [0, 1]:
-            for dy in [0, 1]:
-                for dz in [0, 1]:
-                    key = (round(x0 + dx * (x1 - x0), 6),
-                           round(y0 + dy * (y1 - y0), 6),
-                           round(z0 + dz * (z1 - z0), 6))
-                    points[(dx, dy, dz)] = results.get(key, 0)  # Default to 0 if missing
-
-        # Calculate normalized distances (dx, dy, dz between 0 and 1)
-        dx = (v0 - x0) / (x1 - x0) if x1 != x0 else 0
-        dy = (theta - y0) / (y1 - y0) if y1 != y0 else 0
-        dz = (mass - z0) / (z1 - z0) if z1 != z0 else 0
-
-        # Clamp values to [0, 1] to handle edge cases
-        dx = max(0, min(1, dx))
-        dy = max(0, min(1, dy))
-        dz = max(0, min(1, dz))
-
-        # Trilinear interpolation
-        interpolated_value = (
-                points[(0, 0, 0)] * (1 - dx) * (1 - dy) * (1 - dz) +
-                points[(1, 0, 0)] * dx * (1 - dy) * (1 - dz) +
-                points[(0, 1, 0)] * (1 - dx) * dy * (1 - dz) +
-                points[(1, 1, 0)] * dx * dy * (1 - dz) +
-                points[(0, 0, 1)] * (1 - dx) * (1 - dy) * dz +
-                points[(1, 0, 1)] * dx * (1 - dy) * dz +
-                points[(0, 1, 1)] * (1 - dx) * dy * dz +
-                points[(1, 1, 1)] * dx * dy * dz
-        )
-
-        # Append the interpolated value to the results
-        current_x = np.cos(fragments[i][2]) * interpolated_value[0]
-        current_y = np.sin(fragments[i][2]) * interpolated_value[0]
-
-        # Data structure: (x_position, y_position, speed, angle, mass)
-        res.append((current_x, current_y, interpolated_value[1],
-                    interpolated_value[2], mass))
-
     return res
 
 # # Test the lookup

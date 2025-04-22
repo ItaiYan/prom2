@@ -30,7 +30,7 @@ def generate_fragments(bomb: Bomb) -> np.ndarray:
     for section in range(bomb.num_of_sections):
         section_fragments = []
         mass_accum = 0
-        mass_target = 2 * bomb.mean_mass[section] * bomb.num_of_fragments[
+        mass_target = bomb.mean_mass[section] * bomb.num_of_fragments[
             section]
 
         dphi = np.pi / bomb.num_of_sections
@@ -63,7 +63,6 @@ def generate_fragments(bomb: Bomb) -> np.ndarray:
                 mass_accum += total_mass[-1]
 
         section_all = np.concatenate(section_fragments, axis=0)
-        section_all = section_all[(section_all[:, 3] >= 1e-3) & (section_all[:, 3] <= 2)]
         fragments.append(section_all)
 
     return np.concatenate(fragments, axis=0)
