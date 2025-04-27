@@ -63,7 +63,8 @@ def generate_fragments(bomb: Bomb) -> np.ndarray:
                 mass_accum += total_mass[-1]
 
         section_all = np.concatenate(section_fragments, axis=0)
-        fragments.append(section_all)
+        res = section_all[section_all[:, 3] > 0.02]
+        fragments.append(res)
 
     return np.concatenate(fragments, axis=0)
 
