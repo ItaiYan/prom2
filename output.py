@@ -4,6 +4,7 @@ import time
 from datetime import datetime, timedelta
 import matplotlib
 import typing
+import hitLocationCheck
 
 matplotlib.use('TkAgg')
 from matplotlib import pyplot as plt
@@ -269,16 +270,16 @@ def get_death_probability_map(hit_map: List[List[List[np.ndarray]]]) -> np.ndarr
 
 
 if __name__ == '__main__':
-    num_runs = 20
+    num_runs = 200
     death_prob = 0
 
-    print ("before loading file")
-    file = dataGenerator.load_file()
-    print ("after loading file")
-    values, x, y, z = file
-    interp_func = RegularGridInterpolator((x, y, z), values, bounds_error=False,
-                                          method='quintic', fill_value=None)
-    print ("after creating the interpolation function")
+    # print ("before loading file")
+    # file = dataGenerator.load_file()
+    # print ("after loading file")
+    # values, x, y, z = file
+    # interp_func = RegularGridInterpolator((x, y, z), values, bounds_error=False,
+    #                                       method='quintic', fill_value=None)
+    # print ("after creating the interpolation function")
 
     # t = time.time()
     for i in tqdm(range(num_runs)):
@@ -286,7 +287,7 @@ if __name__ == '__main__':
         initial_conds = particleGenerator.test() # 0.01
 
         # generates a list of
-        shreds = dataGenerator.get_interpolated_value(initial_conds, interp_func) # 0.012
+        shreds = hitLocationCheck.main(initial_conds) # 0.012
 
 
         hit_map = convert_to_table(shreds) #0.04-0.07
