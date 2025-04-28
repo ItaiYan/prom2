@@ -111,8 +111,8 @@ def open_data():
     num_of_fragments = bomb_data["N"].to_numpy()
     mean_mass = bomb_data["mean weight (grain)"].to_numpy() * 0.00006479891
     mean_velocity = bomb_data["mean velocity (ft/s)"].to_numpy() * 0.3048
-    urban_area = bool(data["urban area"])
-
+    # urban_area = bool(data["urban area"])
+    urban_area = False  # For testing purposes, set to False
     bomb = Bomb(
         num_of_fragments=num_of_fragments,
         mean_mass=mean_mass,
@@ -166,3 +166,12 @@ def test():
         transformed = reduce_speed_all_fragments(transformed)
 
     return transformed
+
+
+
+# bomb, theta_hit, velocity, urban_area = open_data()
+# fragments = generate_fragments(bomb)
+# transformed = transform_coordinates(fragments, velocity,
+#                                         np.radians(theta_hit))
+# if urban_area:
+#      transformed = reduce_speed_all_fragments(transformed)

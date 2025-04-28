@@ -6,7 +6,7 @@ import dataGenerator
 from scipy.interpolate import RegularGridInterpolator
 from output import *
 from tqdm import tqdm
-import hitLocations
+import oldSimulaion
 
 def monte_carlo(num_of_runs = 20):
     kill_probability_per_r = 0

@@ -2,7 +2,7 @@ import numpy as np
 import pickle
 import time
 from tqdm import tqdm  # For progress bar
-from hitLocations import run_parallel_rk45
+from oldSimulaion import run_parallel_rk45
 from scipy.interpolate import RegularGridInterpolator
 
 # Define the example function (you can modify this to your needs)

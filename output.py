@@ -4,7 +4,8 @@ import time
 from datetime import datetime, timedelta
 import matplotlib
 import typing
-import hitLocationCheck
+import openAreaSimulation
+import urbanAreaSimulation
 
 matplotlib.use('TkAgg')
 from matplotlib import pyplot as plt
@@ -13,11 +14,12 @@ from matplotlib.patches import Circle
 import numpy as np
 import math
 import particleGenerator
-import hitLocations
+import oldSimulaion
 from numba import njit
 from typing import List
 from tqdm import tqdm
 from scipy.interpolate import RegularGridInterpolator
+import json
 
 import dataGenerator
 
@@ -268,9 +270,7 @@ def get_death_probability_map(hit_map: List[List[List[np.ndarray]]]) -> np.ndarr
             result[x, y] = find_kill_probability_per_square(hit_map[x][y])
     return result
 
-
-if __name__ == '__main__':
-    num_runs = 200
+def open_area_simulatioan(num_runs = 200):
     death_prob = 0
 
     # print ("before loading file")
@@ -284,15 +284,14 @@ if __name__ == '__main__':
     # t = time.time()
     for i in tqdm(range(num_runs)):
         # generates initial conditions
-        initial_conds = particleGenerator.test() # 0.01
+        initial_conds = particleGenerator.test()  # 0.01
 
         # generates a list of
-        shreds = hitLocationCheck.main(initial_conds) # 0.012
+        shreds = openAreaSimulation.main(initial_conds)  # 0.012
 
+        hit_map = convert_to_table(shreds)  # 0.04-0.07
 
-        hit_map = convert_to_table(shreds) #0.04-0.07
-
-        if type(death_prob) == int: # 0.03
+        if type(death_prob) == int:  # 0.03
             death_prob = (np.array(get_death_probability_map(hit_map)) /
                           num_runs)
         else:
@@ -305,3 +304,48 @@ if __name__ == '__main__':
         # print (f"run {i+1} of {num_runs} average time {((e-t)/(i+1))} "
         #        f"seconds, eta {future_time}")
     color(death_prob)
+
+
+def urban_area_simulation(num_runs=200):
+    num_runs = 100
+    death_prob = 0
+
+    building_grid, grid_origin, grid_cell_size = urbanAreaSimulation.create_building_grid()
+    for i in tqdm(range(num_runs)):
+        # generates initial conditions
+        initial_conds = particleGenerator.test()  # 0.01
+
+        # generates a list of
+        shreds = urbanAreaSimulation.run_particle_simulation(
+            initial_conds, building_grid, grid_origin, grid_cell_size,
+            initial_height=1.5, dt=0.05, t_max=45.0
+        )
+
+        hit_map = convert_to_table(shreds)  # 0.04-0.07
+
+        if type(death_prob) == int:  # 0.03
+            death_prob = (np.array(get_death_probability_map(hit_map)) /
+                          num_runs)
+        else:
+            death_prob += (np.array(get_death_probability_map(hit_map)) /
+                           num_runs)
+
+        # e = time.time()
+        # future_time = datetime.now() + timedelta(seconds=((num_runs-i-1)*(e-t))/(i+1))
+        # future_time = future_time.strftime("%H:%M:%S")
+        # print (f"run {i+1} of {num_runs} average time {((e-t)/(i+1))} "
+        #        f"seconds, eta {future_time}")
+    color(death_prob)
+
+if __name__ == '__main__':
+    with open("input.JSON") as f:
+        data = json.load(f)
+        urban_area = bool(data["urban area"])
+
+    if urban_area:
+        urban_area_simulation()
+    else:
+        open_area_simulatioan(10)
+
+
+
