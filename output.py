@@ -93,21 +93,23 @@ def convert_to_table(shreds, squre_size=10, length=2000):
             TVM = [shreds[i][3], shreds[i][2], shreds[i][4]] #theata, velocity, mass
             A[h, w].append(TVM)
 
-    for y in range(int(length / squre_size)):
-        for x in range(len(A[0])):
-            A[length // squre_size - y, x] = A[length // squre_size + y, x]
+    # for y in range(int(length / squre_size)):
+    #     for x in range(len(A[0])):
+    #         A[length // squre_size - y, x] = A[length // squre_size + y, x]
 
     return A
 
 
 def color(data, building_height_grid=None, scatter_x=None, scatter_y=None,
-          grid_extent_plot_m=2000, output_filename="plots.png"):
+          grid_extent_plot_m=2000, output_filename="plot.png",
+          transparent_low_values=False): # Added new parameter
     """
-    Generates a heatmap plot with optional scatter points and potentially
-    higher-resolution building height overlay, and saves it to a file.
+    Generates a heatmap plot. Optionally makes cells with log10(probability) <= -6
+    transparent based on the transparent_low_values flag. Includes optional
+    scatter points and building overlay. Saves the plot to a file.
 
     Args:
-        data (np.ndarray): 2D array of values (e.g., log probability) for the heatmap.
+        data (np.ndarray): 2D array of values (e.g., raw probability) for the heatmap.
         building_height_grid (np.ndarray, optional): 2D array of building heights.
                                                      Can have a different resolution than 'data',
                                                      but should cover the same physical extent.
@@ -120,6 +122,10 @@ def color(data, building_height_grid=None, scatter_x=None, scatter_y=None,
                                             Defaults to 2000.
         output_filename (str, optional): Path where the plot image will be saved.
                                          Defaults to "plot.png".
+        transparent_low_values (bool, optional): If True, makes heatmap cells with
+                                                 log10(probability) <= -6 transparent.
+                                                 If False, these cells get the lowest
+                                                 colormap color (white). Defaults to True.
     """
     # --- Input Validation ---
     data = np.array(data)
@@ -129,11 +135,15 @@ def color(data, building_height_grid=None, scatter_x=None, scatter_y=None,
 
     # --- Data Transformation (Log Scale for Heatmap) ---
     plot_data = data.copy().astype(float)
-    threshold = 1e-6
-    plot_data[plot_data < threshold] = threshold
-    with np.errstate(divide='ignore'): # Ignore log10(0) warnings, handled next
+    threshold = 1e-6 # Values below this will be treated as the minimum (-6 log10)
+    with np.errstate(divide='ignore'): # Ignore log10(0) warnings
+        plot_data[plot_data < threshold] = threshold
         plot_data = np.log10(plot_data)
-    plot_data[data < threshold] = -6.0 # Set original sub-threshold values to -6
+    plot_data[data < threshold] = -6.0 # Ensure exact -6 for comparison
+
+    # --- Create Mask for Low Values (Used if transparent_low_values is True) ---
+    mask = plot_data <= -6.0
+    masked_plot_data = np.ma.masked_where(mask, plot_data)
 
 
     # --- Coordinate Setup ---
@@ -154,17 +164,36 @@ def color(data, building_height_grid=None, scatter_x=None, scatter_y=None,
 
 
     # --- Plotting ---
-    fig, ax = plt.subplots(figsize=(11, 10)) # Get figure and axes objects
+    fig, ax = plt.subplots(figsize=(11, 10))
 
     # Define colormap for heatmap
-    heatmap_colors = [(1, 1, 1), (1, 0.8, 0.8), (1, 0, 0)]
-    heatmap_norm = Normalize(vmin=-6, vmax=0)
+    heatmap_colors = [(1, 1, 1), (1, 0.8, 0.8), (1, 0, 0)] # White -> Light Red -> Red
+    heatmap_norm = Normalize(vmin=-6, vmax=0) # Normalize from -6 to 0
     heatmap_cmap = LinearSegmentedColormap.from_list('white_to_red', heatmap_colors, N=256)
 
+    # --- Set the color for masked ('bad') values based on parameter ---
+    if transparent_low_values:
+        # Make masked values (<= -6) transparent
+        heatmap_cmap.set_bad(color=(0, 0, 0, 0)) # Transparent
+        data_to_plot = masked_plot_data # Plot the masked data
+        print("Low probability cells will be transparent.")
+    else:
+        # Make masked values opaque white (the lowest color in this cmap)
+        # Or simply don't set 'bad' if the default is acceptable
+        heatmap_cmap.set_bad(color=(1, 1, 1, 1)) # Opaque White
+        data_to_plot = masked_plot_data # Still plot masked data, but 'bad' color is opaque
+        # Alternatively, plot original data, but masking is cleaner for consistency
+        # data_to_plot = plot_data
+        print("Low probability cells will be opaque white.")
+
+
     # Create the heatmap
-    mesh = ax.pcolormesh(x_edges, y_edges, plot_data, cmap=heatmap_cmap, norm=heatmap_norm, shading='flat')
+    mesh = ax.pcolormesh(x_edges, y_edges, data_to_plot, # Use data determined above
+                         cmap=heatmap_cmap, norm=heatmap_norm, shading='flat')
+
     fig.colorbar(mesh, ax=ax, label='Log10(Kill Probability)', fraction=0.046, pad=0.04)
-    ax.set_title('Kill Probability Heatmap with Buildings')
+    title_suffix = "(Low Prob Transparent)" if transparent_low_values else "(Low Prob Opaque)"
+    ax.set_title(f'Kill Probability Heatmap with Buildings {title_suffix}')
     ax.axis('equal')
 
     # --- Add Building Height Grid Overlay ---
@@ -174,22 +203,22 @@ def color(data, building_height_grid=None, scatter_x=None, scatter_y=None,
             print(f"Overlaying building height grid (shape: {building_height_grid.shape}).")
             masked_buildings = np.ma.masked_where(building_height_grid <= 0, building_height_grid)
             building_cmap = plt.cm.Greys
-            building_cmap.set_bad(alpha=0)
+            building_cmap.set_bad(alpha=0) # Make non-building areas transparent
             ax.imshow(masked_buildings, cmap=building_cmap, origin='lower', extent=plot_extent,
-                      aspect='equal', alpha=0.5, interpolation='none')
+                      aspect='equal', alpha=0.6, interpolation='none', zorder=0)
         else:
             print("Warning: Building height grid is not a valid 2D array. Skipping overlay.")
 
 
     # Add scatter plot
     if scatter_x is not None and scatter_y is not None:
-        ax.scatter(scatter_x, scatter_y, c='dimgray', s=1, alpha=0.5, label='Scatter Points')
+        ax.scatter(scatter_x, scatter_y, c='dimgray', s=1, alpha=0.5, label='Scatter Points', zorder=5)
 
 
     # Add contour line
     try:
         if plot_data.shape == (len(y_centers), len(x_centers)):
-             cs = ax.contour(x_centers, y_centers, plot_data, levels=[-3.5], colors='blue', linewidths=1.5)
+             cs = ax.contour(x_centers, y_centers, plot_data, levels=[-3.5], colors='blue', linewidths=1.5, zorder=10)
              ax.clabel(cs, inline=True, fontsize=9, fmt='%1.1f (logP)')
         else:
              print("Warning: Heatmap data dimensions mismatch for contour plot.")
@@ -209,7 +238,7 @@ def color(data, building_height_grid=None, scatter_x=None, scatter_y=None,
         radius_c = np.max(distances_c)
         print(f"Max distance for points > {contour_level_for_circle} (logP): {radius_c:.2f} m")
         circle = Circle((0, 0), radius_c, fill=False, color='magenta', linestyle=':', linewidth=2,
-                        label=f'Radius for > {contour_level_for_circle} logP')
+                        label=f'Radius for > {contour_level_for_circle} logP', zorder=15)
         ax.add_patch(circle)
     else:
         print(f"No data points found above contour level {contour_level_for_circle} for circle calculation.")
@@ -219,11 +248,12 @@ def color(data, building_height_grid=None, scatter_x=None, scatter_y=None,
     ax.set_xlabel('Distance X (meters)')
     ax.set_ylabel('Distance Y (meters)')
     ax.tick_params(axis='both', labelsize=8)
-    ax.grid(alpha=0.4, linestyle=':')
+    ax.grid(alpha=0.4, linestyle=':', zorder=-1)
     ax.set_xlim(plot_extent[0], plot_extent[1])
     ax.set_ylim(plot_extent[2], plot_extent[3])
     ax.legend()
     plt.tight_layout()
+
 
     # --- Save the plot instead of showing it ---
     bomb, theta_hit, velocity, urban_area = particleGenerator.open_data()
@@ -235,7 +265,9 @@ def color(data, building_height_grid=None, scatter_x=None, scatter_y=None,
             os.makedirs(output_dir)
             print(f"Created output directory: {output_dir}")
 
-        plt.savefig(output_filename, dpi=300) # Save with high resolution
+        plt.savefig('plot_transparent.png',
+                    transparent=True,  # enable transparency
+                    dpi=300)
         print(f"Plot saved to: {output_filename}")
     except Exception as e:
         print(f"Error saving plot to {output_filename}: {e}")
@@ -284,7 +316,7 @@ def _find_kill_probability_per_square_numba(fragments: np.ndarray) -> float:
     Input: (n, 5) NumPy array.
     """
     if fragments.shape[0] == 0:
-        return -6.0
+        return -10.0
 
     theta = fragments[:, 0]
     velocity = fragments[:, 1]
@@ -330,15 +362,6 @@ def get_death_probability_map(hit_map: List[List[List[np.ndarray]]]) -> np.ndarr
 def open_area_simulatioan(num_runs = 200):
     death_prob = 0
 
-    # print ("before loading file")
-    # file = dataGenerator.load_file()
-    # print ("after loading file")
-    # values, x, y, z = file
-    # interp_func = RegularGridInterpolator((x, y, z), values, bounds_error=False,
-    #                                       method='quintic', fill_value=None)
-    # print ("after creating the interpolation function")
-
-    # t = time.time()
     for i in tqdm(range(num_runs)):
         # generates initial conditions
         initial_conds = particleGenerator.test()  # 0.01
@@ -374,7 +397,7 @@ def urban_area_simulation(num_runs=200):
         # generates a list of
         shreds = urbanAreaSimulation.run_particle_simulation(
             initial_conds, building_grid, grid_origin, grid_cell_size,
-            initial_height=1.5, dt=0.05, t_max=45.0
+            initial_height=1.5, dt=0.005, t_max=45.0
         )
 
         hit_map = convert_to_table(shreds)  # 0.04-0.07
@@ -399,9 +422,9 @@ if __name__ == '__main__':
         urban_area = bool(data["urban area"])
 
     if urban_area:
-        urban_area_simulation()
+        urban_area_simulation(50)
     else:
-        open_area_simulatioan(1000)
+        open_area_simulatioan(10)
 
 
 

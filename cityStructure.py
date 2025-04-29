@@ -52,6 +52,8 @@ def get_building_matrix(center_x = 180787, center_y = 670770) -> np.ndarray:
     )
 
     building_raster = np.nan_to_num(building_raster, nan=0.0)
+    half_size = int(half_size)
+    building_raster[half_size - 57:half_size + 15, half_size-15:half_size+35] = 0
     return building_raster
 
 

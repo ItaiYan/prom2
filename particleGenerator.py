@@ -43,7 +43,7 @@ def generate_fragments(bomb: Bomb) -> np.ndarray:
         while mass_accum < mass_target:
             batch_size = 500  # process in chunks to reduce overhead
             theta = np.random.uniform(theta_min, theta_max, batch_size)
-            phi = np.random.uniform(0, np.pi, batch_size)
+            phi = np.random.uniform(0, 2 * np.pi, batch_size)
             mass = generate_mass_vectorized(mean_mass, batch_size)
             velocity = np.full(batch_size, v)
             density = np.full(batch_size, d)
@@ -112,8 +112,7 @@ def open_data():
     num_of_fragments = bomb_data["N"].to_numpy()
     mean_mass = bomb_data["mean weight (grain)"].to_numpy() * 0.00006479891
     mean_velocity = bomb_data["mean velocity (ft/s)"].to_numpy() * 0.3048
-    # urban_area = bool(data["urban area"])
-    urban_area = False  # For testing purposes, set to False
+    urban_area = bool(data["urban area"])
     bomb = Bomb(
         num_of_fragments=num_of_fragments,
         mean_mass=mean_mass,
@@ -127,8 +126,8 @@ def open_data():
 
 def reduce_speed_all_fragments(fragments: np.ndarray, h=0.02):
     # Constants for Mild Steel (from your table)
-    c11, c12, c13, c14, c15 = 4.356, 0.674, -0.791, 0.989, 0.434
-    c31, c32, c33, c34, c35 = 1.195, 0.234, 0.744, 0.469, 0.483
+    c11, c12, c13, c14, c15 = 1.999, 0.499, -0.502, 0.655, 0.818
+    c31, c32, c33, c34, c35 = -1.856, 0.506, 0.350, 0.777, 0.934
     ks = 0.298
 
     # Indices (make sure they match your fragments array structure)
@@ -150,19 +149,21 @@ def reduce_speed_all_fragments(fragments: np.ndarray, h=0.02):
     num_vr = 0.3048 * (10 ** c11) * (61023.75 * h * areas) ** c12
     den_vr = (15432.1 * safe_m0) ** c13 * (sec_theta) ** c14 * (3.28084 * safe_VR) ** c15
     Vr = safe_VR - num_vr * den_vr
-    Vr = np.maximum(Vr, 0.0)  # prevent negative velocities
+    mask_v = Vr > 0.001
 
     # Calculate new Residual Mass mr directly
-    num_mr = 6.48 * (10 ** (c31 ** -5)) * (61023.75 * h * areas) ** c32
+    num_mr = 6.48 * (10 ** (c31 - 5)) * (61023.75 * h * areas) ** c32
     den_mr = (15432.1 * safe_m0) ** c33 * (sec_theta) ** c34 * (3.28084 * safe_VR) ** c35
     mr = safe_m0 - num_mr * den_mr
-    mr = np.maximum(mr, 0.0)  # prevent negative masses
+    mask_m = mr > 0.001
 
     # Update the fragments
     fragments[:, V] = Vr
     fragments[:, MASS] = mr
 
-    return fragments
+
+    full_mask = mask_m & mask_v
+    return fragments[full_mask]
 
 
 def test():
@@ -170,6 +171,8 @@ def test():
     fragments = generate_fragments(bomb)
     transformed = transform_coordinates(fragments, velocity,
                                         np.radians(theta_hit))
+
+
     if urban_area:
         transformed = reduce_speed_all_fragments(transformed)
 
