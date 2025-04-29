@@ -63,8 +63,8 @@ def generate_fragments(bomb: Bomb) -> np.ndarray:
                 mass_accum += total_mass[-1]
 
         section_all = np.concatenate(section_fragments, axis=0)
-        res = section_all[section_all[:, 3] > 0.02]
-        fragments.append(res)
+        #res = section_all[section_all[:, 3] > 0.02]
+        fragments.append(section_all)
 
     return np.concatenate(fragments, axis=0)
 
@@ -126,34 +126,41 @@ def open_data():
     return bomb, theta_hit, velocity, urban_area
 
 def reduce_speed_all_fragments(fragments: np.ndarray, h=0.02):
-    # Constants for Mild Steel from THOR formula table
-    c11 = 4.356
-    c12 = 0.674
-    c13 = -0.791
-    c14 = 0.989
-    c15 = 0.434
-    c31 = -1.195
-    c32 = 0.234
-    c33 = 0.743
-    c34 = 0.469
-    c35 = 0.483
+    # Constants for Mild Steel (from your table)
+    c11, c12, c13, c14, c15 = 4.356, 0.674, -0.791, 0.989, 0.434
+    c31, c32, c33, c34, c35 = 1.195, 0.234, 0.744, 0.469, 0.483
+    ks = 0.298
+
+    # Indices (make sure they match your fragments array structure)
 
     V_R = fragments[:, V]
-    m0 = fragments[:, MASS]
-    density = fragments[:, DENSITY]
+    mass = fragments[:, MASS]
     theta = fragments[:, THETA]
+    density = fragments[:, DENSITY]
+    # Correct power operator for area ∝ (mass / density/ks)^(2/3)
+    areas = (mass / (density * ks)) ** (2 / 3)
 
-    A = (m0 / (density * 0.298)) ** (2 / 3)
+    # Safe values
+    safe_m0 = np.clip(mass, 1e-8, None)  # mass must be positive
+    safe_VR = np.clip(V_R, 1e-8, None)  # velocity must be positive
+    cos_theta = np.clip(np.cos(theta), 1e-6, 1.0)
+    sec_theta = 1 / cos_theta  # secant(theta)
 
-    # First reduction (Velocity)
-    num1 = 0.3048e11 * (61023.75 * h) ** c12
-    den1 = (15432.1 * m0) ** c13 * (1 / np.cos(theta)) ** c14 * (3.28084 * V_R) ** c15
-    fragments[:, V] = V_R - num1 / den1
+    # Calculate new Residual Velocity Vr directly
+    num_vr = 0.3048 * (10 ** c11) * (61023.75 * h * areas) ** c12
+    den_vr = (15432.1 * safe_m0) ** c13 * (sec_theta) ** c14 * (3.28084 * safe_VR) ** c15
+    Vr = safe_VR - num_vr * den_vr
+    Vr = np.maximum(Vr, 0.0)  # prevent negative velocities
 
-    # Second reduction (Mass)
-    num2 = 6.48e26 * (61023.75 * h) ** c32
-    den2 = (15432.1 * m0) ** c33 * (1 / np.cos(theta)) ** c34 * (3.28084 * V_R) ** c35
-    fragments[:, MASS] = m0 - num2 / den2
+    # Calculate new Residual Mass mr directly
+    num_mr = 6.48 * (10 ** (c31 ** -5)) * (61023.75 * h * areas) ** c32
+    den_mr = (15432.1 * safe_m0) ** c33 * (sec_theta) ** c34 * (3.28084 * safe_VR) ** c35
+    mr = safe_m0 - num_mr * den_mr
+    mr = np.maximum(mr, 0.0)  # prevent negative masses
+
+    # Update the fragments
+    fragments[:, V] = Vr
+    fragments[:, MASS] = mr
 
     return fragments
 

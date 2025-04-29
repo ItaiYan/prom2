@@ -189,6 +189,10 @@ def rk4_vectorized_simulation_numba(
                 grid_y_idx = int(np.floor(grid_y_float))
                 if (building_grid[grid_y_idx, grid_x_idx] > current_height and
                         current_height > 1):
+                    ## apllay thor equation twice on the particle
+
+
+
                     final_results[idx_global, 0] = current_range
                     final_results[idx_global, 1] = np.sqrt(
                         current_state[2] ** 2 + current_state[3] ** 2)

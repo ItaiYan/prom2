@@ -1,5 +1,6 @@
 # this moodle will convert the output grid to a scatter plot of the hit
 # positions of the shreds
+import os
 import time
 from datetime import datetime, timedelta
 import matplotlib
@@ -9,7 +10,7 @@ import urbanAreaSimulation
 
 matplotlib.use('TkAgg')
 from matplotlib import pyplot as plt
-from matplotlib.colors import LinearSegmentedColormap
+from matplotlib.colors import LinearSegmentedColormap, Normalize
 from matplotlib.patches import Circle
 import numpy as np
 import math
@@ -99,92 +100,148 @@ def convert_to_table(shreds, squre_size=10, length=2000):
     return A
 
 
-def color(data, scatter_x=None, scatter_y=None, table_size=1000):
-    # Convert data to numpy array if it isn't already
+def color(data, building_height_grid=None, scatter_x=None, scatter_y=None,
+          grid_extent_plot_m=2000, output_filename="plots.png"):
+    """
+    Generates a heatmap plot with optional scatter points and potentially
+    higher-resolution building height overlay, and saves it to a file.
+
+    Args:
+        data (np.ndarray): 2D array of values (e.g., log probability) for the heatmap.
+        building_height_grid (np.ndarray, optional): 2D array of building heights.
+                                                     Can have a different resolution than 'data',
+                                                     but should cover the same physical extent.
+                                                     Values > 0 indicate building presence.
+                                                     Defaults to None.
+        scatter_x (np.ndarray, optional): X-coordinates for scatter points. Defaults to None.
+        scatter_y (np.ndarray, optional): Y-coordinates for scatter points. Defaults to None.
+        grid_extent_plot_m (int, optional): The total physical extent (width/height in meters)
+                                            covered by both grids, assumed centered at 0,0.
+                                            Defaults to 2000.
+        output_filename (str, optional): Path where the plot image will be saved.
+                                         Defaults to "plot.png".
+    """
+    # --- Input Validation ---
     data = np.array(data)
+    if data.ndim != 2 or data.size == 0:
+        print("Error: Input data for heatmap is not a valid 2D array.")
+        return
 
-    for row in range(len(data)):
-        for column in range(len(data[0])):
-            prob = data[row][column]
-            if prob < 10 ** -6:
-                data[row][column] = -6
-            else:
-                data[row][column] = np.log10(prob)
+    # --- Data Transformation (Log Scale for Heatmap) ---
+    plot_data = data.copy().astype(float)
+    threshold = 1e-6
+    plot_data[plot_data < threshold] = threshold
+    with np.errstate(divide='ignore'): # Ignore log10(0) warnings, handled next
+        plot_data = np.log10(plot_data)
+    plot_data[data < threshold] = -6.0 # Set original sub-threshold values to -6
 
 
-    # Each square is 10 meters, so create coordinate arrays in meters
-    x = np.arange(0, data.shape[1] + 1) * 10 - 2000  # +1 for pcolormesh edges
-    y = np.arange(0, data.shape[0] + 1) * 10 - 2000   # +1 for pcolormesh edges
+    # --- Coordinate Setup ---
+    heatmap_height_cells, heatmap_width_cells = plot_data.shape
+    if heatmap_width_cells <= 0 or heatmap_height_cells <= 0:
+        print("Error: Heatmap data grid has zero dimensions.")
+        return
+    heatmap_cell_size_x = grid_extent_plot_m / heatmap_width_cells
+    heatmap_cell_size_y = grid_extent_plot_m / heatmap_height_cells
+    plot_origin_x = -grid_extent_plot_m / 2
+    plot_origin_y = -grid_extent_plot_m / 2
+    plot_extent = [plot_origin_x, plot_origin_x + grid_extent_plot_m,
+                   plot_origin_y, plot_origin_y + grid_extent_plot_m]
+    x_edges = np.linspace(plot_extent[0], plot_extent[1], heatmap_width_cells + 1)
+    y_edges = np.linspace(plot_extent[2], plot_extent[3], heatmap_height_cells + 1)
+    x_centers = (x_edges[:-1] + x_edges[1:]) / 2
+    y_centers = (y_edges[:-1] + y_edges[1:]) / 2
 
-    # Define a custom colormap: white (0) to red (1)
-    colors = [(1, 1, 1), (1, 0, 0)]  # White to Red
-    custom_cmap = LinearSegmentedColormap.from_list('white_to_red', colors,
-                                                    N=256)
 
-    # Create the plot
-    plt.figure(figsize=(8, 8))
-    plt.pcolormesh(x, y, data, cmap=custom_cmap, shading='auto')
-    plt.colorbar(label='Value')
-    plt.title('2D Grid: 0 (White) to 1 (Red)')
+    # --- Plotting ---
+    fig, ax = plt.subplots(figsize=(11, 10)) # Get figure and axes objects
 
-    # Add the scatter plot if scatter data is provided
+    # Define colormap for heatmap
+    heatmap_colors = [(1, 1, 1), (1, 0.8, 0.8), (1, 0, 0)]
+    heatmap_norm = Normalize(vmin=-6, vmax=0)
+    heatmap_cmap = LinearSegmentedColormap.from_list('white_to_red', heatmap_colors, N=256)
+
+    # Create the heatmap
+    mesh = ax.pcolormesh(x_edges, y_edges, plot_data, cmap=heatmap_cmap, norm=heatmap_norm, shading='flat')
+    fig.colorbar(mesh, ax=ax, label='Log10(Kill Probability)', fraction=0.046, pad=0.04)
+    ax.set_title('Kill Probability Heatmap with Buildings')
+    ax.axis('equal')
+
+    # --- Add Building Height Grid Overlay ---
+    if building_height_grid is not None:
+        building_height_grid = np.array(building_height_grid)
+        if building_height_grid.ndim == 2 and building_height_grid.size > 0:
+            print(f"Overlaying building height grid (shape: {building_height_grid.shape}).")
+            masked_buildings = np.ma.masked_where(building_height_grid <= 0, building_height_grid)
+            building_cmap = plt.cm.Greys
+            building_cmap.set_bad(alpha=0)
+            ax.imshow(masked_buildings, cmap=building_cmap, origin='lower', extent=plot_extent,
+                      aspect='equal', alpha=0.5, interpolation='none')
+        else:
+            print("Warning: Building height grid is not a valid 2D array. Skipping overlay.")
+
+
+    # Add scatter plot
     if scatter_x is not None and scatter_y is not None:
-        plt.scatter(scatter_x, scatter_y, c='black', s=1,
-                    label='Scatter Points')
-        plt.legend()
+        ax.scatter(scatter_x, scatter_y, c='dimgray', s=1, alpha=0.5, label='Scatter Points')
 
-    # Add contour line at z = -3.5
-    x_centers = (np.arange(data.shape[1]) + 0.5) * 10 - 2000
-    y_centers = (np.arange(data.shape[0]) + 0.5) * 10 - 2000
-    cs = plt.contour(x_centers, y_centers, data, levels=[-3.5], colors='black')
-    plt.clabel(cs, inline=True, fontsize=10, fmt='%1.1f')
 
-    for lim in [-3.5]:
+    # Add contour line
+    try:
+        if plot_data.shape == (len(y_centers), len(x_centers)):
+             cs = ax.contour(x_centers, y_centers, plot_data, levels=[-3.5], colors='blue', linewidths=1.5)
+             ax.clabel(cs, inline=True, fontsize=9, fmt='%1.1f (logP)')
+        else:
+             print("Warning: Heatmap data dimensions mismatch for contour plot.")
+    except Exception as e:
+        print(f"Could not plot contour: {e}")
 
-        # Calculate the radius for the circle
-        # Find all points where value > -3.5
-        y_idx, x_idx = np.where(data > lim)
-        x_points = (x_idx + 0.5) * 10  # Convert to meters (center of cells)
-        y_points = (y_idx + 0.5) * 10  # Convert to meters (center of cells)
 
-        # Calculate distances from center (1000, 1000)
-        center_x, center_y = 2000, 2000
-        distances = np.sqrt((x_points - center_x) ** 2 + (y_points - center_y) ** 2)
-
-        # Get maximum distance (radius) plus a small buffer
-        radius = np.max(distances) if len(distances) > 0 else 0
-        print (radius)
-        radius += 10  # Add small buffer to ensure all points are enclosed
-
-        # Add circle centered at (1000, 1000)
-        circle = Circle((0, 0), radius, fill=False,
-                        color='blue',
-                        linestyle='--', linewidth=2)
-        plt.gca().add_patch(circle)
-
-    # Adjust ticks to show meters, limiting to ~10 ticks for readability
-    max_ticks = 10
-    if data.shape[1] > max_ticks:
-        x_step = (data.shape[1] * 10) // max_ticks  # Step in meters
-        plt.xticks(np.arange(0, data.shape[1] * 10 + 1, x_step) - 2000)
+    # --- Circle Calculation ---
+    contour_level_for_circle = -3.5
+    y_idx_c, x_idx_c = np.where(plot_data > contour_level_for_circle)
+    heatmap_cell_size_x = grid_extent_plot_m / plot_data.shape[1]
+    heatmap_cell_size_y = grid_extent_plot_m / plot_data.shape[0]
+    x_points_c = (x_idx_c + 0.5) * heatmap_cell_size_x + plot_origin_x
+    y_points_c = (y_idx_c + 0.5) * heatmap_cell_size_y + plot_origin_y
+    if x_points_c.size > 0:
+        distances_c = np.sqrt(x_points_c**2 + y_points_c**2)
+        radius_c = np.max(distances_c)
+        print(f"Max distance for points > {contour_level_for_circle} (logP): {radius_c:.2f} m")
+        circle = Circle((0, 0), radius_c, fill=False, color='magenta', linestyle=':', linewidth=2,
+                        label=f'Radius for > {contour_level_for_circle} logP')
+        ax.add_patch(circle)
     else:
-        plt.xticks(x)
+        print(f"No data points found above contour level {contour_level_for_circle} for circle calculation.")
 
-    if data.shape[0] > max_ticks:
-        y_step = (data.shape[0] * 10) // max_ticks  # Step in meters
-        plt.yticks(np.arange(0, data.shape[0] * 10 + 1, y_step) - 2000)
-    else:
-        plt.yticks(y)
 
-    # Label axes in meters
-    plt.xlabel('Distance (meters)')
-    plt.ylabel('Distance (meters)')
+    # --- Final Touches ---
+    ax.set_xlabel('Distance X (meters)')
+    ax.set_ylabel('Distance Y (meters)')
+    ax.tick_params(axis='both', labelsize=8)
+    ax.grid(alpha=0.4, linestyle=':')
+    ax.set_xlim(plot_extent[0], plot_extent[1])
+    ax.set_ylim(plot_extent[2], plot_extent[3])
+    ax.legend()
+    plt.tight_layout()
 
-    # Improve tick label readability
-    plt.tick_params(axis='both', labelsize=8)
-    plt.grid(alpha=0.3)
-    plt.axis('equal')
-    plt.show()
+    # --- Save the plot instead of showing it ---
+    bomb, theta_hit, velocity, urban_area = particleGenerator.open_data()
+    output_filename = str(theta_hit) + "m"
+    try:
+        # Ensure the output directory exists
+        output_dir = os.path.dirname(output_filename)
+        if output_dir and not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+            print(f"Created output directory: {output_dir}")
+
+        plt.savefig(output_filename, dpi=300) # Save with high resolution
+        print(f"Plot saved to: {output_filename}")
+    except Exception as e:
+        print(f"Error saving plot to {output_filename}: {e}")
+    finally:
+        # --- Close the plot to free memory ---
+        plt.close(fig) # Close the figure associated with the axes 'ax'
 
 
 
@@ -307,7 +364,6 @@ def open_area_simulatioan(num_runs = 200):
 
 
 def urban_area_simulation(num_runs=200):
-    num_runs = 100
     death_prob = 0
 
     building_grid, grid_origin, grid_cell_size = urbanAreaSimulation.create_building_grid()
@@ -345,7 +401,7 @@ if __name__ == '__main__':
     if urban_area:
         urban_area_simulation()
     else:
-        open_area_simulatioan(10)
+        open_area_simulatioan(1000)
 
 
 
